@@ -1,28 +1,32 @@
 """
-URL routes для accounts app.
+URL patterns for accounts app.
 """
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import (
-    TokenObtainPairView,
-    TokenRefreshView,
+from django.urls import path
+from rest_framework_simplejwt.views import TokenRefreshView
+from .views import (
+    UserRegistrationView,
+    UserLoginView,
+    UserLogoutView,
+    UserProfileView,
+    ChangePasswordView,
+    AchievementListView,
+    UserStatsView,
 )
-from .views import UserViewSet, RegisterView, ProfileView
-
-router = DefaultRouter()
-router.register('users', UserViewSet, basename='user')
 
 app_name = 'accounts'
 
 urlpatterns = [
-    # JWT Authentication
-    path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    # Authentication
+    path('register/', UserRegistrationView.as_view(), name='register'),
+    path('login/', UserLoginView.as_view(), name='login'),
+    path('logout/', UserLogoutView.as_view(), name='logout'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     
-    # Registration and Profile
-    path('register/', RegisterView.as_view(), name='register'),
-    path('profile/', ProfileView.as_view(), name='profile'),
+    # Profile
+    path('profile/', UserProfileView.as_view(), name='profile'),
+    path('change-password/', ChangePasswordView.as_view(), name='change_password'),
+    path('stats/', UserStatsView.as_view(), name='user_stats'),
     
-    # Router URLs
-    path('', include(router.urls)),
+    # Achievements
+    path('achievements/', AchievementListView.as_view(), name='achievements'),
 ]

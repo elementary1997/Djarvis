@@ -1,20 +1,29 @@
 """
-Views для аутентификации и управления пользователями.
+Views for user authentication and profile management.
 """
-from rest_framework import viewsets, generics, status, permissions
-from rest_framework.decorators import action
+from rest_framework import generics, status, permissions
 from rest_framework.response import Response
-from django.contrib.auth import get_user_model
-from .serializers import UserSerializer, RegisterSerializer, ProfileSerializer
+from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib.auth import logout
+from .models import User, Achievement
+from .serializers import (
+    UserRegistrationSerializer,
+    UserLoginSerializer,
+    UserProfileSerializer,
+    UserUpdateSerializer,
+    ChangePasswordSerializer,
+    AchievementSerializer,
+)
 
-User = get_user_model()
 
-
-class RegisterView(generics.CreateAPIView):
-    """API endpoint для регистрации новых пользователей."""
+class UserRegistrationView(generics.CreateAPIView):
+    """
+    API endpoint for user registration.
     
-    queryset = User.objects.all()
-    serializer_class = RegisterSerializer
+    POST /api/auth/register/
+    """
+    serializer_class = UserRegistrationSerializer
     permission_classes = [permissions.AllowAny]
     
     def create(self, request, *args, **kwargs):
@@ -22,39 +31,170 @@ class RegisterView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
         
-        return Response(
-            {
-                'user': UserSerializer(user).data,
-                'message': 'User registered successfully. Please login.',
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(user)
+        
+        return Response({
+            'user': UserProfileSerializer(user).data,
+            'tokens': {
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
             },
-            status=status.HTTP_201_CREATED
-        )
+            'message': 'User registered successfully'
+        }, status=status.HTTP_201_CREATED)
 
 
-class ProfileView(generics.RetrieveUpdateAPIView):
-    """API endpoint для просмотра и обновления профиля."""
+class UserLoginView(APIView):
+    """
+    API endpoint for user login.
     
-    serializer_class = ProfileSerializer
+    POST /api/auth/login/
+    """
+    permission_classes = [permissions.AllowAny]
+    serializer_class = UserLoginSerializer
+    
+    def post(self, request):
+        serializer = self.serializer_class(
+            data=request.data,
+            context={'request': request}
+        )
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+        
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(user)
+        
+        return Response({
+            'user': UserProfileSerializer(user).data,
+            'tokens': {
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            },
+            'message': 'Login successful'
+        }, status=status.HTTP_200_OK)
+
+
+class UserLogoutView(APIView):
+    """
+    API endpoint for user logout.
+    
+    POST /api/auth/logout/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request):
+        try:
+            refresh_token = request.data.get('refresh_token')
+            if refresh_token:
+                token = RefreshToken(refresh_token)
+                token.blacklist()
+            logout(request)
+            return Response(
+                {'message': 'Logout successful'},
+                status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+class UserProfileView(generics.RetrieveUpdateAPIView):
+    """
+    API endpoint for viewing and updating user profile.
+    
+    GET /api/auth/profile/
+    PUT/PATCH /api/auth/profile/
+    """
+    serializer_class = UserProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
     
     def get_object(self):
-        """Возвращает текущего авторизованного пользователя."""
         return self.request.user
-
-
-class UserViewSet(viewsets.ReadOnlyModelViewSet):
-    """API endpoint для просмотра пользователей (только чтение)."""
     
-    queryset = User.objects.filter(is_active=True)
-    serializer_class = UserSerializer
+    def get_serializer_class(self):
+        if self.request.method in ['PUT', 'PATCH']:
+            return UserUpdateSerializer
+        return UserProfileSerializer
+
+
+class ChangePasswordView(APIView):
+    """
+    API endpoint for changing user password.
+    
+    POST /api/auth/change-password/
+    """
     permission_classes = [permissions.IsAuthenticated]
-    search_fields = ['username', 'email', 'first_name', 'last_name']
-    ordering_fields = ['total_points', 'created_at']
-    ordering = ['-total_points']
     
-    @action(detail=False, methods=['get'])
-    def leaderboard(self, request):
-        """Возвращает топ пользователей по очкам."""
-        top_users = self.get_queryset().order_by('-total_points')[:100]
-        serializer = self.get_serializer(top_users, many=True)
-        return Response(serializer.data)
+    def post(self, request):
+        serializer = ChangePasswordSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+        serializer.is_valid(raise_exception=True)
+        
+        # Set new password
+        user = request.user
+        user.set_password(serializer.validated_data['new_password'])
+        user.save()
+        
+        return Response(
+            {'message': 'Password changed successfully'},
+            status=status.HTTP_200_OK
+        )
+
+
+class AchievementListView(generics.ListAPIView):
+    """
+    API endpoint for listing all achievements.
+    
+    GET /api/auth/achievements/
+    """
+    queryset = Achievement.objects.filter(is_active=True)
+    serializer_class = AchievementSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+
+class UserStatsView(APIView):
+    """
+    API endpoint for user statistics.
+    
+    GET /api/auth/stats/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        user = request.user
+        
+        # Calculate statistics
+        from apps.progress.models import LessonProgress, ExerciseAttempt
+        
+        completed_lessons = LessonProgress.objects.filter(
+            user=user,
+            is_completed=True
+        ).count()
+        
+        completed_exercises = ExerciseAttempt.objects.filter(
+            user=user,
+            is_passed=True
+        ).values('exercise').distinct().count()
+        
+        total_attempts = ExerciseAttempt.objects.filter(user=user).count()
+        
+        achievements_unlocked = user.achievements.count()
+        
+        return Response({
+            'user': {
+                'level': user.level,
+                'total_xp': user.total_xp,
+                'xp_to_next_level': user.xp_to_next_level,
+                'progress_percentage': user.progress_percentage,
+            },
+            'statistics': {
+                'completed_lessons': completed_lessons,
+                'completed_exercises': completed_exercises,
+                'total_attempts': total_attempts,
+                'achievements_unlocked': achievements_unlocked,
+            }
+        }, status=status.HTTP_200_OK)
