@@ -1,53 +1,58 @@
 # Django Core
 Django==5.0.1
-django-environ==0.11.2
-psycopg2-binary==2.9.9
-
-# Django REST Framework
 djangorestframework==3.14.0
-djangorestframework-simplejwt==5.3.1
 django-cors-headers==4.3.1
-django-filter==23.5
-drf-spectacular==0.27.0
+django-filter==24.1
+django-environ==0.11.2
+
+# Database
+psycopg2-binary==2.9.9
+dj-database-url==2.1.0
+
+# Authentication & Security
+django-allauth==0.61.1
+djangorestframework-simplejwt==5.3.1
+PyJWT==2.8.0
+cryptography==42.0.2
 
 # Celery & Redis
 celery==5.3.6
 redis==5.0.1
 django-redis==5.4.0
-django-celery-beat==2.5.0
-django-celery-results==2.5.1
 
-# Async & Channels
-channels==4.0.0
-channels-redis==4.1.0
-daphne==4.0.0
-
-# Security
-django-ratelimit==4.1.0
-django-defender==0.9.7
-
-# Utils
-Pillow==10.2.0
-python-dotenv==1.0.0
-gunicorn==21.2.0
-whitenoise==6.6.0
-
-# Ansible
-ansible==9.1.0
-ansible-runner==2.3.4
-
-# Docker
+# Docker SDK
 docker==7.0.0
 
-# Markdown
+# API Documentation
+drf-spectacular==0.27.1
+
+# WSGI Server
+gunicorn==21.2.0
+
+# Utilities
+python-dotenv==1.0.1
+Pillow==10.2.0
 markdown==3.5.2
-django-markdownx==4.0.2
+pyyaml==6.0.1
+requests==2.31.0
+
+# Development & Testing
+ipython==8.21.0
+pytest==8.0.0
+pytest-django==4.7.0
+faker==22.7.0
+factory-boy==3.3.0
+
+# Code Quality
+black==24.1.1
+flake8==7.0.0
+isort==5.13.2
+mypy==1.8.0
+django-stubs==4.2.7
 
 # Monitoring
 sentry-sdk==1.40.0
 
-# Testing
-pytest==7.4.4
-pytest-django==4.7.0
-pytest-cov==4.1.0
-faker==22.6.0
+# Ansible
+ansible==9.2.0
+ansible-lint==24.2.0

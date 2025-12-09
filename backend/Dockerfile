@@ -1,44 +1,37 @@
 FROM python:3.11-slim
 
-# Метаданные
-LABEL maintainer="elipashev2023@yandex.ru"
-LABEL description="Djarvis - Interactive Ansible Learning Platform"
-
-# Переменные окружения
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Рабочая директория
-WORKDIR /app
-
-# Установка системных зависимостей
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
     postgresql-client \
     libpq-dev \
-    curl \
     docker.io \
-    openssh-client \
-    sshpass \
-    ansible \
+    git \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Установка Python зависимостей
-COPY requirements.txt .
+# Install Ansible
 RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+    pip install ansible ansible-lint
 
-# Копирование проекта
+# Set work directory
+WORKDIR /app
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+# Copy project
 COPY . .
 
-# Создание необходимых директорий
+# Create necessary directories
 RUN mkdir -p /app/staticfiles /app/media /app/logs
 
-# Права на выполнение скриптов
-RUN chmod +x /app/scripts/*.sh || true
-
+# Collect static files will be done in docker-compose command
 EXPOSE 8000
-
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000"]

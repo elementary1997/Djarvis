@@ -1,4 +1,4 @@
-version: '3.9'
+version: '3.8'
 
 services:
   db:
@@ -7,13 +7,13 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     environment:
-      POSTGRES_DB: djarvis
-      POSTGRES_USER: djarvis_user
-      POSTGRES_PASSWORD: djarvis_password
+      - POSTGRES_DB=djarvis
+      - POSTGRES_USER=djarvis_user
+      - POSTGRES_PASSWORD=djarvis_pass_change_in_prod
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U djarvis_user -d djarvis"]
+      test: ["CMD-SHELL", "pg_isready -U djarvis_user"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -26,7 +26,7 @@ services:
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
-      timeout: 5s
+      timeout: 3s
       retries: 5
 
   web:
@@ -34,15 +34,12 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: djarvis_web
-    command: >
-      sh -c "python manage.py migrate &&
-             python manage.py collectstatic --noinput &&
-             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120"
+    command: sh -c "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120"
     volumes:
       - ./backend:/app
       - static_volume:/app/staticfiles
       - media_volume:/app/media
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock  # For Docker-in-Docker
     ports:
       - "8000:8000"
     env_file:
@@ -52,7 +49,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    restart: unless-stopped
 
   celery_worker:
     build:
@@ -69,14 +65,13 @@ services:
       - db
       - redis
       - web
-    restart: unless-stopped
 
   celery_beat:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: djarvis_celery_beat
-    command: celery -A config beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    command: celery -A config beat -l info
     volumes:
       - ./backend:/app
     env_file:
@@ -85,7 +80,20 @@ services:
       - db
       - redis
       - web
-    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: djarvis_frontend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=production
+      - REACT_APP_API_URL=http://localhost/api
+    depends_on:
+      - web
 
   nginx:
     image: nginx:alpine
@@ -96,17 +104,18 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - static_volume:/static:ro
-      - media_volume:/media:ro
-      - ./frontend/build:/var/www/frontend:ro
+      - static_volume:/static
+      - media_volume:/media
+      - frontend_build:/var/www/frontend
     depends_on:
       - web
-    restart: unless-stopped
+      - frontend
 
 volumes:
   postgres_data:
   static_volume:
   media_volume:
+  frontend_build:
 
 networks:
   default:
