@@ -6,7 +6,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm install --production=false
 
 # Copy source code
 COPY . .
@@ -20,7 +20,7 @@ FROM nginx:alpine
 # Copy built files
 COPY --from=build /app/dist /var/www/frontend
 
-# Copy nginx config (if needed)
+# Copy custom nginx config if needed
 # COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80

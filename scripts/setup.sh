@@ -28,7 +28,7 @@ if [ ! -f backend/.env ]; then
     cp backend/.env.example backend/.env
     
     # Generate secret key
-    SECRET_KEY=$(python3 -c "import random, string; print(''.join(random.SystemRandom().choice(string.ascii_letters + string.digits + string.punctuation) for _ in range(50)))")
+    SECRET_KEY=$(python3 -c "import random, string; print(''.join(random.SystemRandom().choice(string.ascii_letters + string.digits + string.punctuation) for _ in range(50)))" 2>/dev/null || echo "change-this-secret-key-in-production-$(date +%s)")
     
     # Update .env with generated secret key
     if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -39,13 +39,27 @@ if [ ! -f backend/.env ]; then
     
     echo "✅ .env file created with generated secret key"
 else
-    echo "ℹ️ .env file already exists"
+    echo "ℹ️  .env file already exists"
 fi
 
-# Build containers
+# Build frontend first
+echo ""
+echo "📦 Building frontend..."
+cd frontend
+if [ ! -d "node_modules" ]; then
+    echo "Installing npm dependencies..."
+    npm install
+fi
+echo "Building React app..."
+npm run build
+cd ..
+
+echo "✅ Frontend built successfully"
+
+# Build backend containers
 echo ""
 echo "🛠️ Building Docker containers..."
-docker-compose build
+docker-compose build web celery_worker celery_beat
 
 echo ""
 echo "✅ Setup complete!"
