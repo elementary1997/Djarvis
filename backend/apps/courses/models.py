@@ -1,289 +1,148 @@
 """
-Models for courses, modules, and lessons.
+Модели для курсов, модулей и уроков.
+
+Архитектурное решение:
+- Иерархическая структура: Course -> Module -> Lesson
+- Markdown для контента с поддержкой интерактивных элементов
+- Порядок через ordering поля для гибкой сортировки
 """
 from django.db import models
-from django.contrib.auth import get_user_model
-from django.utils.text import slugify
+from django.utils.translation import gettext_lazy as _
 from django.core.validators import MinValueValidator, MaxValueValidator
+from markdownx.models import MarkdownxField
 
-User = get_user_model()
+
+class DifficultyLevel(models.TextChoices):
+    """Уровни сложности курсов/модулей."""
+    BEGINNER = 'beginner', _('Beginner')
+    INTERMEDIATE = 'intermediate', _('Intermediate')
+    ADVANCED = 'advanced', _('Advanced')
 
 
 class Course(models.Model):
-    """Main course model."""
+    """Курс - верхний уровень структуры обучения."""
     
-    DIFFICULTY_CHOICES = [
-        ('beginner', 'Beginner'),
-        ('intermediate', 'Intermediate'),
-        ('advanced', 'Advanced'),
-    ]
-    
-    title = models.CharField(
-        max_length=200,
-        help_text='Course title'
-    )
-    slug = models.SlugField(
-        max_length=200,
-        unique=True,
-        help_text='URL-friendly course identifier'
-    )
-    description = models.TextField(
-        help_text='Detailed course description'
-    )
-    short_description = models.CharField(
-        max_length=300,
-        help_text='Brief course overview'
+    title = models.CharField(_('title'), max_length=200)
+    slug = models.SlugField(_('slug'), unique=True, max_length=200)
+    description = models.TextField(_('description'))
+    cover_image = models.ImageField(
+        _('cover image'),
+        upload_to='courses/covers/',
+        blank=True,
+        null=True
     )
     difficulty = models.CharField(
+        _('difficulty'),
         max_length=20,
-        choices=DIFFICULTY_CHOICES,
-        default='beginner'
+        choices=DifficultyLevel.choices,
+        default=DifficultyLevel.BEGINNER
     )
-    thumbnail = models.ImageField(
-        upload_to='courses/thumbnails/',
-        null=True,
-        blank=True
+    estimated_hours = models.PositiveIntegerField(
+        _('estimated hours'),
+        validators=[MinValueValidator(1)],
+        help_text=_('Estimated time to complete in hours')
     )
-    estimated_hours = models.IntegerField(
-        default=0,
-        help_text='Estimated completion time in hours'
-    )
-    is_published = models.BooleanField(
-        default=False,
-        help_text='Course visibility status'
-    )
-    order = models.IntegerField(
-        default=0,
-        help_text='Display order'
-    )
-    created_by = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='created_courses'
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    ordering = models.IntegerField(_('ordering'), default=0)
+    is_published = models.BooleanField(_('is published'), default=False)
+    
+    created_at = models.DateTimeField(_('created at'), auto_now_add=True)
+    updated_at = models.DateTimeField(_('updated at'), auto_now=True)
     
     class Meta:
-        db_table = 'courses'
-        ordering = ['order', 'title']
+        verbose_name = _('course')
+        verbose_name_plural = _('courses')
+        ordering = ['ordering', 'title']
         indexes = [
             models.Index(fields=['slug']),
-            models.Index(fields=['is_published']),
+            models.Index(fields=['is_published', 'ordering']),
         ]
     
-    def __str__(self):
+    def __str__(self) -> str:
         return self.title
     
-    def save(self, *args, **kwargs):
-        if not self.slug:
-            self.slug = slugify(self.title)
-        super().save(*args, **kwargs)
-    
     @property
-    def total_modules(self):
-        """Count of modules in course."""
+    def total_modules(self) -> int:
+        """Возвращает количество модулей в курсе."""
         return self.modules.count()
     
     @property
-    def total_lessons(self):
-        """Count of lessons in course."""
+    def total_lessons(self) -> int:
+        """Возвращает общее количество уроков во всех модулях."""
         return sum(module.lessons.count() for module in self.modules.all())
 
 
 class Module(models.Model):
-    """Course module/chapter."""
+    """Модуль - раздел курса, содержащий уроки."""
     
     course = models.ForeignKey(
         Course,
         on_delete=models.CASCADE,
-        related_name='modules'
+        related_name='modules',
+        verbose_name=_('course')
     )
-    title = models.CharField(
-        max_length=200,
-        help_text='Module title'
+    title = models.CharField(_('title'), max_length=200)
+    slug = models.SlugField(_('slug'), max_length=200)
+    description = models.TextField(_('description'))
+    difficulty = models.CharField(
+        _('difficulty'),
+        max_length=20,
+        choices=DifficultyLevel.choices,
+        default=DifficultyLevel.BEGINNER
     )
-    slug = models.SlugField(
-        max_length=200,
-        help_text='URL-friendly module identifier'
-    )
-    description = models.TextField(
-        blank=True,
-        help_text='Module description'
-    )
-    order = models.IntegerField(
-        default=0,
-        help_text='Display order within course'
-    )
-    is_published = models.BooleanField(
-        default=False,
-        help_text='Module visibility status'
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    ordering = models.IntegerField(_('ordering'), default=0)
+    is_published = models.BooleanField(_('is published'), default=False)
+    
+    created_at = models.DateTimeField(_('created at'), auto_now_add=True)
+    updated_at = models.DateTimeField(_('updated at'), auto_now=True)
     
     class Meta:
-        db_table = 'modules'
-        ordering = ['course', 'order']
-        unique_together = ['course', 'slug']
+        verbose_name = _('module')
+        verbose_name_plural = _('modules')
+        ordering = ['ordering', 'title']
+        unique_together = [['course', 'slug']]
         indexes = [
-            models.Index(fields=['course', 'order']),
+            models.Index(fields=['course', 'ordering']),
         ]
     
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.course.title} - {self.title}"
-    
-    def save(self, *args, **kwargs):
-        if not self.slug:
-            self.slug = slugify(self.title)
-        super().save(*args, **kwargs)
-    
-    @property
-    def total_lessons(self):
-        """Count of lessons in module."""
-        return self.lessons.count()
 
 
 class Lesson(models.Model):
-    """Individual lesson within a module."""
-    
-    LESSON_TYPE_CHOICES = [
-        ('theory', 'Theory'),
-        ('practice', 'Practice'),
-        ('quiz', 'Quiz'),
-        ('project', 'Project'),
-    ]
+    """Урок - отдельная единица контента с теорией."""
     
     module = models.ForeignKey(
         Module,
         on_delete=models.CASCADE,
-        related_name='lessons'
+        related_name='lessons',
+        verbose_name=_('module')
     )
-    title = models.CharField(
-        max_length=200,
-        help_text='Lesson title'
+    title = models.CharField(_('title'), max_length=200)
+    slug = models.SlugField(_('slug'), max_length=200)
+    content = MarkdownxField(_('content'), help_text=_('Markdown formatted content'))
+    
+    # Video content (optional)
+    video_url = models.URLField(_('video URL'), blank=True, null=True)
+    
+    estimated_minutes = models.PositiveIntegerField(
+        _('estimated minutes'),
+        validators=[MinValueValidator(1)],
+        help_text=_('Estimated time to complete in minutes')
     )
-    slug = models.SlugField(
-        max_length=200,
-        help_text='URL-friendly lesson identifier'
-    )
-    lesson_type = models.CharField(
-        max_length=20,
-        choices=LESSON_TYPE_CHOICES,
-        default='theory'
-    )
-    content = models.TextField(
-        help_text='Lesson content in Markdown format'
-    )
-    order = models.IntegerField(
-        default=0,
-        help_text='Display order within module'
-    )
-    estimated_minutes = models.IntegerField(
-        default=10,
-        help_text='Estimated completion time in minutes'
-    )
-    is_published = models.BooleanField(
-        default=False,
-        help_text='Lesson visibility status'
-    )
-    video_url = models.URLField(
-        blank=True,
-        help_text='Optional video tutorial URL'
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    ordering = models.IntegerField(_('ordering'), default=0)
+    is_published = models.BooleanField(_('is published'), default=False)
+    
+    created_at = models.DateTimeField(_('created at'), auto_now_add=True)
+    updated_at = models.DateTimeField(_('updated at'), auto_now=True)
     
     class Meta:
-        db_table = 'lessons'
-        ordering = ['module', 'order']
-        unique_together = ['module', 'slug']
+        verbose_name = _('lesson')
+        verbose_name_plural = _('lessons')
+        ordering = ['ordering', 'title']
+        unique_together = [['module', 'slug']]
         indexes = [
-            models.Index(fields=['module', 'order']),
+            models.Index(fields=['module', 'ordering']),
         ]
     
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.module.title} - {self.title}"
-    
-    def save(self, *args, **kwargs):
-        if not self.slug:
-            self.slug = slugify(self.title)
-        super().save(*args, **kwargs)
-
-
-class CourseEnrollment(models.Model):
-    """Track user enrollments in courses."""
-    
-    user = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name='enrollments'
-    )
-    course = models.ForeignKey(
-        Course,
-        on_delete=models.CASCADE,
-        related_name='enrollments'
-    )
-    enrolled_at = models.DateTimeField(auto_now_add=True)
-    completed_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text='Course completion timestamp'
-    )
-    is_active = models.BooleanField(
-        default=True,
-        help_text='Enrollment active status'
-    )
-    progress_percentage = models.IntegerField(
-        default=0,
-        validators=[MinValueValidator(0), MaxValueValidator(100)],
-        help_text='Course completion percentage'
-    )
-    
-    class Meta:
-        db_table = 'course_enrollments'
-        unique_together = ['user', 'course']
-        ordering = ['-enrolled_at']
-        indexes = [
-            models.Index(fields=['user', 'is_active']),
-        ]
-    
-    def __str__(self):
-        return f"{self.user.email} - {self.course.title}"
-    
-    @property
-    def is_completed(self):
-        """Check if course is completed."""
-        return self.completed_at is not None
-
-
-class LessonCompletion(models.Model):
-    """Track user lesson completions."""
-    
-    user = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name='lesson_completions'
-    )
-    lesson = models.ForeignKey(
-        Lesson,
-        on_delete=models.CASCADE,
-        related_name='completions'
-    )
-    completed_at = models.DateTimeField(auto_now_add=True)
-    time_spent_minutes = models.IntegerField(
-        default=0,
-        help_text='Time spent on lesson in minutes'
-    )
-    
-    class Meta:
-        db_table = 'lesson_completions'
-        unique_together = ['user', 'lesson']
-        ordering = ['-completed_at']
-        indexes = [
-            models.Index(fields=['user', 'completed_at']),
-        ]
-    
-    def __str__(self):
-        return f"{self.user.email} - {self.lesson.title}"
