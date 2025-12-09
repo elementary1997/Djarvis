@@ -1,90 +1,83 @@
 """
-Модели для трекинга выполнения кода в sandbox.
-
-Архитектурное решение:
-- Логирование всех попыток выполнения
-- Сохранение stdout/stderr для анализа
-- Celery tasks для асинхронного выполнения
+Models for sandbox execution sessions.
 """
 from django.db import models
 from django.conf import settings
-from django.utils.translation import gettext_lazy as _
+from django.utils import timezone
+from datetime import timedelta
 
 
-class ExecutionStatus(models.TextChoices):
-    """Статусы выполнения."""
-    PENDING = 'pending', _('Pending')
-    RUNNING = 'running', _('Running')
-    SUCCESS = 'success', _('Success')
-    FAILED = 'failed', _('Failed')
-    TIMEOUT = 'timeout', _('Timeout')
-    ERROR = 'error', _('Error')
-
-
-class Execution(models.Model):
-    """Запись о выполнении кода в sandbox."""
+class SandboxSession(models.Model):
+    """
+    Tracks active sandbox containers for students.
+    
+    Attributes:
+        user: Student using the sandbox
+        container_id: Docker container ID
+        container_name: Unique container name
+        status: Current status (starting, running, stopped, error)
+        created_at: When session was created
+        expires_at: When session should be cleaned up
+        last_activity: Last time container was used
+    """
+    
+    STATUS_CHOICES = [
+        ('starting', 'Starting'),
+        ('running', 'Running'),
+        ('stopped', 'Stopped'),
+        ('error', 'Error'),
+        ('expired', 'Expired'),
+    ]
     
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name='executions',
-        verbose_name=_('user')
+        related_name='sandbox_sessions'
     )
-    exercise = models.ForeignKey(
-        'exercises.Exercise',
-        on_delete=models.CASCADE,
-        related_name='executions',
-        verbose_name=_('exercise')
-    )
-    
-    code = models.TextField(_('code'), help_text=_('Submitted Ansible code'))
-    status = models.CharField(
-        _('status'),
-        max_length=20,
-        choices=ExecutionStatus.choices,
-        default=ExecutionStatus.PENDING
-    )
-    
-    # Results
-    stdout = models.TextField(_('stdout'), blank=True)
-    stderr = models.TextField(_('stderr'), blank=True)
-    test_results = models.JSONField(_('test results'), default=dict)
-    passed = models.BooleanField(_('passed'), default=False)
-    
-    # Metrics
-    execution_time_seconds = models.FloatField(
-        _('execution time (seconds)'),
+    container_id = models.CharField(
+        max_length=64,
+        unique=True,
         null=True,
         blank=True
     )
-    points_earned = models.PositiveIntegerField(_('points earned'), default=0)
-    
-    # Container info
-    container_id = models.CharField(
-        _('container ID'),
+    container_name = models.CharField(
         max_length=100,
-        blank=True
+        unique=True
     )
-    
-    # Celery task
-    celery_task_id = models.CharField(
-        _('celery task ID'),
-        max_length=100,
-        blank=True
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='starting'
     )
-    
-    created_at = models.DateTimeField(_('created at'), auto_now_add=True)
-    completed_at = models.DateTimeField(_('completed at'), null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    last_activity = models.DateTimeField(auto_now=True)
     
     class Meta:
-        verbose_name = _('execution')
-        verbose_name_plural = _('executions')
+        db_table = 'sandbox_sessions'
         ordering = ['-created_at']
         indexes = [
-            models.Index(fields=['user', '-created_at']),
-            models.Index(fields=['exercise', '-created_at']),
-            models.Index(fields=['status']),
+            models.Index(fields=['user', 'status']),
+            models.Index(fields=['expires_at']),
         ]
     
     def __str__(self) -> str:
-        return f"{self.user.email} - {self.exercise.title} ({self.status})"
+        return f"{self.user.email} - {self.container_name} ({self.status})"
+    
+    def save(self, *args, **kwargs):
+        # Set expiration time on creation
+        if not self.pk and not self.expires_at:
+            self.expires_at = timezone.now() + timedelta(
+                seconds=settings.SESSION_COOKIE_AGE
+            )
+        super().save(*args, **kwargs)
+    
+    @property
+    def is_expired(self) -> bool:
+        """Check if session has expired."""
+        return timezone.now() > self.expires_at
+    
+    def extend_session(self, minutes: int = 30) -> None:
+        """Extend session expiration time."""
+        self.expires_at = timezone.now() + timedelta(minutes=minutes)
+        self.save(update_fields=['expires_at'])
