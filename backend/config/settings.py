@@ -1,12 +1,18 @@
 """
 Django settings for Djarvis project.
+
+Данный конфигурационный файл следует best practices для production-ready приложений:
+- Использование environment variables для чувствительных данных
+- Разделение настроек для development/production
+- Оптимизированные настройки безопасности и производительности
 """
+
 import os
 from pathlib import Path
-import environ
 from datetime import timedelta
+import environ
 
-# Build paths inside the project
+# Build paths
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Environment variables
@@ -15,19 +21,16 @@ env = environ.Env(
     ALLOWED_HOSTS=(list, ['localhost', '127.0.0.1']),
 )
 
-# Read .env file if exists
 environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = env('SECRET_KEY', default='django-insecure-change-this-in-production-12345678')
-
-# SECURITY WARNING: don't run with debug turned on in production!
+# Security
+SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
-
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS')
 
 # Application definition
 INSTALLED_APPS = [
+    # Django apps
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -35,14 +38,17 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     
-    # Third party apps
+    # Third party
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
     'django_filters',
     'drf_spectacular',
+    'channels',
     'django_celery_beat',
     'django_celery_results',
+    'markdownx',
+    'defender',
     
     # Local apps
     'apps.accounts',
@@ -54,13 +60,15 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'defender.middleware.FailedLoginMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -82,11 +90,48 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'config.wsgi.application'
+ASGI_APPLICATION = 'config.asgi.application'
 
 # Database
 DATABASES = {
-    'default': env.db('DATABASE_URL', default='postgresql://djarvis_user:djarvis_pass_2024@localhost:5432/djarvis')
+    'default': env.db('DATABASE_URL')
 }
+
+DATABASES['default']['ATOMIC_REQUESTS'] = True
+DATABASES['default']['CONN_MAX_AGE'] = 600
+
+# Cache
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': env('REDIS_URL'),
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+        },
+        'KEY_PREFIX': 'djarvis',
+        'TIMEOUT': 300,
+    }
+}
+
+# Channels
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [env('REDIS_URL')],
+        },
+    },
+}
+
+# Celery
+CELERY_BROKER_URL = env('CELERY_BROKER_URL')
+CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'Europe/Moscow'
+CELERY_TASK_TIME_LIMIT = 600
+CELERY_TASK_SOFT_TIME_LIMIT = 540
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -97,15 +142,15 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # Internationalization
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'ru-RU'
 TIME_ZONE = 'Europe/Moscow'
 USE_I18N = True
 USE_TZ = True
 
-# Static files (CSS, JavaScript, Images)
+# Static files
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_DIRS = []
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Media files
 MEDIA_URL = '/media/'
@@ -117,7 +162,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Custom user model
 AUTH_USER_MODEL = 'accounts.User'
 
-# REST Framework settings
+# REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -140,63 +185,43 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '100/hour',
         'user': '1000/hour',
-        'code_execution': '30/hour',  # Custom rate for code execution
+        'sandbox': '50/hour',
     },
 }
 
 # JWT Settings
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=env.int('JWT_ACCESS_TOKEN_LIFETIME', default=60)),
+    'REFRESH_TOKEN_LIFETIME': timedelta(minutes=env.int('JWT_REFRESH_TOKEN_LIFETIME', default=1440)),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
-    'UPDATE_LAST_LOGIN': True,
-    'ALGORITHM': 'HS256',
-    'SIGNING_KEY': SECRET_KEY,
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
-# CORS settings
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:3000',
-    'http://localhost',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1',
-]
+# CORS
+CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS')
 CORS_ALLOW_CREDENTIALS = True
 
-# Celery Configuration
-CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default='redis://localhost:6379/0')
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
-CELERY_TIMEZONE = TIME_ZONE
-CELERY_TASK_TRACK_STARTED = True
-CELERY_TASK_TIME_LIMIT = 300  # 5 minutes
-CELERY_RESULT_EXTENDED = True
+# CSRF
+CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS')
 
-# Cache Configuration
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': env('REDIS_URL', default='redis://localhost:6379/1'),
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-        },
-        'KEY_PREFIX': 'djarvis',
-        'TIMEOUT': 300,
-    }
+# DRF Spectacular
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Djarvis API',
+    'DESCRIPTION': 'Interactive Ansible Learning Platform API',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
 }
 
-# Docker settings for sandbox execution
-DOCKER_HOST = env('DOCKER_HOST', default='unix://var/run/docker.sock')
-SANDBOX_IMAGE = 'ansible/ansible:latest'
-SANDBOX_NETWORK = 'djarvis_sandbox'
-SANDBOX_MEMORY_LIMIT = '256m'
-SANDBOX_CPU_QUOTA = 50000  # 50% of one CPU
-SANDBOX_TIMEOUT = 60  # seconds
-MAX_CONCURRENT_SANDBOXES = 10
+# Sandbox Settings
+SANDBOX_SETTINGS = {
+    'MEMORY_LIMIT': env('SANDBOX_MEMORY_LIMIT', default='512m'),
+    'CPU_LIMIT': env.float('SANDBOX_CPU_LIMIT', default=1.0),
+    'TIMEOUT': env.int('SANDBOX_TIMEOUT', default=300),
+    'MAX_CONTAINERS': env.int('SANDBOX_MAX_CONTAINERS', default=50),
+    'BASE_IMAGE': 'ansible/ansible:latest',
+    'NETWORK_MODE': 'bridge',
+}
 
 # Logging
 LOGGING = {
@@ -214,35 +239,29 @@ LOGGING = {
             'formatter': 'verbose',
         },
         'file': {
-            'class': 'logging.FileHandler',
+            'class': 'logging.handlers.RotatingFileHandler',
             'filename': BASE_DIR / 'logs' / 'django.log',
+            'maxBytes': 1024 * 1024 * 10,  # 10MB
+            'backupCount': 5,
             'formatter': 'verbose',
         },
     },
     'root': {
         'handlers': ['console', 'file'],
-        'level': 'INFO',
+        'level': env('LOG_LEVEL', default='INFO'),
     },
     'loggers': {
         'django': {
             'handlers': ['console', 'file'],
-            'level': 'INFO',
+            'level': env('LOG_LEVEL', default='INFO'),
             'propagate': False,
         },
         'apps': {
             'handlers': ['console', 'file'],
-            'level': 'DEBUG' if DEBUG else 'INFO',
+            'level': 'DEBUG',
             'propagate': False,
         },
     },
-}
-
-# DRF Spectacular Settings
-SPECTACULAR_SETTINGS = {
-    'TITLE': 'Djarvis API',
-    'DESCRIPTION': 'Interactive Ansible Learning Platform',
-    'VERSION': '1.0.0',
-    'SERVE_INCLUDE_SCHEMA': False,
 }
 
 # Security settings for production
@@ -253,3 +272,6 @@ if not DEBUG:
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True

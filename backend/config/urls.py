@@ -1,5 +1,5 @@
 """
-URL configuration for Djarvis project.
+URL Configuration for Djarvis project.
 """
 from django.contrib import admin
 from django.urls import path, include
@@ -20,20 +20,23 @@ urlpatterns = [
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     
-    # API endpoints
-    path('api/auth/', include('apps.accounts.urls')),
+    # API Routes
+    path('api/accounts/', include('apps.accounts.urls')),
     path('api/courses/', include('apps.courses.urls')),
     path('api/exercises/', include('apps.exercises.urls')),
     path('api/sandbox/', include('apps.sandbox.urls')),
     path('api/progress/', include('apps.progress.urls')),
+    
+    # Markdown editor
+    path('markdownx/', include('markdownx.urls')),
 ]
 
-# Serve media files in development
+# Static and media files in development
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
-# Customize admin site
+# Admin site customization
 admin.site.site_header = 'Djarvis Administration'
 admin.site.site_title = 'Djarvis Admin'
 admin.site.index_title = 'Welcome to Djarvis Admin Panel'
