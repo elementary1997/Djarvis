@@ -1,13 +1,13 @@
 """
-URL routes для sandbox app.
+URL patterns for sandbox app.
 """
 from django.urls import path
-from .views import ExecuteCodeView, ExecutionStatusView, ExecutionHistoryView
+from .views import CreateSandboxView, ExecuteCodeView, DestroySandboxView
 
 app_name = 'sandbox'
 
 urlpatterns = [
+    path('create/', CreateSandboxView.as_view(), name='create'),
     path('execute/', ExecuteCodeView.as_view(), name='execute'),
-    path('status/<str:task_id>/', ExecutionStatusView.as_view(), name='status'),
-    path('history/', ExecutionHistoryView.as_view(), name='history'),
+    path('destroy/', DestroySandboxView.as_view(), name='destroy'),
 ]
