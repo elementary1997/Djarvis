@@ -1,14 +1,23 @@
 """
-URL routes для progress app.
+URL patterns for progress app.
 """
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
+from django.urls import path
+from .views import (
+    UserProgressOverviewView,
+    ModuleProgressListView,
+    LessonProgressListView,
+    MarkLessonCompleteView,
+    DailyStreakView,
+    LeaderboardView
+)
 
 app_name = 'progress'
 
-# TODO: Add viewsets
-router = DefaultRouter()
-
 urlpatterns = [
-    path('', include(router.urls)),
+    path('overview/', UserProgressOverviewView.as_view(), name='overview'),
+    path('modules/', ModuleProgressListView.as_view(), name='module_progress'),
+    path('lessons/', LessonProgressListView.as_view(), name='lesson_progress'),
+    path('lessons/complete/', MarkLessonCompleteView.as_view(), name='mark_complete'),
+    path('streak/', DailyStreakView.as_view(), name='streak'),
+    path('leaderboard/', LeaderboardView.as_view(), name='leaderboard'),
 ]
