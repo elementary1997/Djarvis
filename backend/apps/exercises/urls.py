@@ -1,14 +1,19 @@
 """
-URL routes для exercises app.
+URL patterns for exercises app.
 """
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
+from django.urls import path
+from .views import (
+    ExerciseListView,
+    ExerciseDetailView,
+    ExerciseAttemptListView,
+    GetHintView
+)
 
 app_name = 'exercises'
 
-# TODO: Add viewsets
-router = DefaultRouter()
-
 urlpatterns = [
-    path('', include(router.urls)),
+    path('', ExerciseListView.as_view(), name='exercise_list'),
+    path('<int:pk>/', ExerciseDetailView.as_view(), name='exercise_detail'),
+    path('<int:exercise_id>/attempts/', ExerciseAttemptListView.as_view(), name='attempt_list'),
+    path('<int:exercise_id>/hint/', GetHintView.as_view(), name='get_hint'),
 ]

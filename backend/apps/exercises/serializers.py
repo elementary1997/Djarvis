@@ -1,212 +1,99 @@
 """
-Serializers for exercises app.
+Serializers for exercises.
 """
 from rest_framework import serializers
-from .models import Exercise, Hint, Submission, HintUsage
+from .models import Exercise, ExerciseAttempt
 
 
-class HintSerializer(serializers.ModelSerializer):
-    """Serializer for Hint model."""
+class ExerciseListSerializer(serializers.ModelSerializer):
+    """Serializer for exercise list."""
     
-    is_revealed = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = Hint
-        fields = [
-            'id', 'order', 'content', 'points_penalty', 'is_revealed'
-        ]
-    
-    def get_is_revealed(self, obj):
-        """Check if hint is revealed for current user."""
-        request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            return HintUsage.objects.filter(
-                user=request.user,
-                hint=obj
-            ).exists()
-        return False
-
-
-class ExerciseSerializer(serializers.ModelSerializer):
-    """Detailed serializer for Exercise model."""
-    
-    hints = HintSerializer(many=True, read_only=True)
+    lesson_title = serializers.CharField(source='lesson.title', read_only=True)
+    completion_rate = serializers.FloatField(read_only=True)
     user_attempts = serializers.SerializerMethodField()
-    best_submission = serializers.SerializerMethodField()
-    is_completed = serializers.SerializerMethodField()
+    user_passed = serializers.SerializerMethodField()
     
     class Meta:
         model = Exercise
         fields = [
-            'id', 'title', 'slug', 'description', 'difficulty',
-            'points', 'initial_code', 'inventory_template',
-            'max_attempts', 'time_limit_seconds', 'hints',
-            'user_attempts', 'best_submission', 'is_completed',
-            'created_at'
+            'id', 'lesson', 'lesson_title', 'title', 'slug',
+            'description', 'difficulty', 'xp_reward', 'order',
+            'max_attempts', 'time_limit_seconds', 'completion_rate',
+            'user_attempts', 'user_passed'
         ]
     
     def get_user_attempts(self, obj):
         """Get number of attempts by current user."""
         request = self.context.get('request')
         if request and request.user.is_authenticated:
-            return Submission.objects.filter(
-                user=request.user,
-                exercise=obj
-            ).count()
+            return obj.attempts.filter(user=request.user).count()
         return 0
     
-    def get_best_submission(self, obj):
-        """Get user's best submission."""
+    def get_user_passed(self, obj):
+        """Check if user has passed this exercise."""
         request = self.context.get('request')
         if request and request.user.is_authenticated:
-            submission = Submission.objects.filter(
-                user=request.user,
-                exercise=obj,
-                status='passed'
-            ).order_by('-points_earned').first()
-            
-            if submission:
-                return {
-                    'id': submission.id,
-                    'points_earned': submission.points_earned,
-                    'submitted_at': submission.submitted_at
-                }
-        return None
-    
-    def get_is_completed(self, obj):
-        """Check if exercise is completed by user."""
-        request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            return Submission.objects.filter(
-                user=request.user,
-                exercise=obj,
-                status='passed'
-            ).exists()
+            return obj.attempts.filter(user=request.user, is_passed=True).exists()
         return False
 
 
-class ExerciseListSerializer(serializers.ModelSerializer):
-    """Simplified serializer for exercise lists."""
+class ExerciseDetailSerializer(serializers.ModelSerializer):
+    """Serializer for exercise detail."""
     
-    is_completed = serializers.SerializerMethodField()
+    lesson_title = serializers.CharField(source='lesson.title', read_only=True)
+    hints = serializers.JSONField(read_only=True)
     user_attempts = serializers.SerializerMethodField()
+    user_best_attempt = serializers.SerializerMethodField()
     
     class Meta:
         model = Exercise
         fields = [
-            'id', 'title', 'slug', 'difficulty', 'points',
-            'max_attempts', 'is_completed', 'user_attempts'
+            'id', 'lesson', 'lesson_title', 'title', 'slug',
+            'description', 'instructions', 'starter_code',
+            'hints', 'difficulty', 'xp_reward', 'order',
+            'max_attempts', 'time_limit_seconds',
+            'user_attempts', 'user_best_attempt', 'is_published'
         ]
     
-    def get_is_completed(self, obj):
-        request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            return Submission.objects.filter(
-                user=request.user,
-                exercise=obj,
-                status='passed'
-            ).exists()
-        return False
-    
     def get_user_attempts(self, obj):
+        """Get user's attempts count."""
         request = self.context.get('request')
         if request and request.user.is_authenticated:
-            return Submission.objects.filter(
-                user=request.user,
-                exercise=obj
-            ).count()
+            return obj.attempts.filter(user=request.user).count()
         return 0
+    
+    def get_user_best_attempt(self, obj):
+        """Get user's best attempt."""
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            best = obj.attempts.filter(
+                user=request.user,
+                is_passed=True
+            ).order_by('execution_time').first()
+            if best:
+                return ExerciseAttemptSerializer(best).data
+        return None
 
 
-class SubmissionSerializer(serializers.ModelSerializer):
-    """Serializer for Submission model."""
+class ExerciseAttemptSerializer(serializers.ModelSerializer):
+    """Serializer for exercise attempts."""
     
     exercise_title = serializers.CharField(source='exercise.title', read_only=True)
     
     class Meta:
-        model = Submission
+        model = ExerciseAttempt
         fields = [
-            'id', 'exercise', 'exercise_title', 'code', 'status',
-            'output', 'error_message', 'test_results',
-            'execution_time_ms', 'points_earned', 'attempt_number',
-            'submitted_at'
+            'id', 'exercise', 'exercise_title', 'code_submitted',
+            'output', 'error_message', 'test_results', 'is_passed',
+            'execution_time', 'hints_used', 'attempt_number', 'created_at'
         ]
-        read_only_fields = [
-            'status', 'output', 'error_message', 'test_results',
-            'execution_time_ms', 'points_earned', 'attempt_number',
-            'submitted_at'
-        ]
+        read_only_fields = ['id', 'is_passed', 'test_results', 'created_at']
 
 
-class SubmissionCreateSerializer(serializers.ModelSerializer):
-    """Serializer for creating submissions."""
+class HintRequestSerializer(serializers.Serializer):
+    """Serializer for hint requests."""
     
-    class Meta:
-        model = Submission
-        fields = ['exercise', 'code']
-    
-    def validate(self, attrs):
-        """Validate submission."""
-        exercise = attrs.get('exercise')
-        user = self.context['request'].user
-        
-        # Check max attempts
-        if exercise.max_attempts > 0:
-            attempt_count = Submission.objects.filter(
-                user=user,
-                exercise=exercise
-            ).count()
-            
-            if attempt_count >= exercise.max_attempts:
-                raise serializers.ValidationError(
-                    f"Maximum {exercise.max_attempts} attempts allowed for this exercise."
-                )
-        
-        return attrs
-    
-    def create(self, validated_data):
-        """Create submission with auto-increment attempt number."""
-        user = self.context['request'].user
-        exercise = validated_data['exercise']
-        
-        # Get attempt number
-        last_attempt = Submission.objects.filter(
-            user=user,
-            exercise=exercise
-        ).order_by('-attempt_number').first()
-        
-        attempt_number = (last_attempt.attempt_number + 1) if last_attempt else 1
-        
-        # Get client IP
-        request = self.context['request']
-        ip_address = request.META.get('REMOTE_ADDR')
-        
-        # Get hints used
-        hints_used = list(
-            HintUsage.objects.filter(
-                user=user,
-                hint__exercise=exercise
-            ).values_list('hint_id', flat=True)
-        )
-        
-        return Submission.objects.create(
-            user=user,
-            attempt_number=attempt_number,
-            ip_address=ip_address,
-            hints_used=hints_used,
-            **validated_data
-        )
-
-
-class HintUsageSerializer(serializers.ModelSerializer):
-    """Serializer for HintUsage model."""
-    
-    hint_content = serializers.CharField(source='hint.content', read_only=True)
-    points_penalty = serializers.IntegerField(source='hint.points_penalty', read_only=True)
-    
-    class Meta:
-        model = HintUsage
-        fields = [
-            'id', 'hint', 'hint_content', 'points_penalty', 'revealed_at'
-        ]
-        read_only_fields = ['revealed_at']
+    hint_index = serializers.IntegerField(
+        min_value=0,
+        help_text='Index of the hint to retrieve'
+    )

@@ -1,148 +1,179 @@
 """
-Модели для трекинга прогресса пользователей.
-
-Архитектурное решение:
-- Детальный трекинг по курсам, модулям, урокам и заданиям
-- Система достижений для gamification
-- Статистика использования подсказок
+Models for tracking user progress.
 """
 from django.db import models
 from django.conf import settings
-from django.utils.translation import gettext_lazy as _
+from django.utils import timezone
+from datetime import timedelta
+from apps.courses.models import Module, Lesson
+
+
+class ModuleProgress(models.Model):
+    """
+    Track user progress through modules.
+    
+    Attributes:
+        user: Student
+        module: Module being tracked
+        is_started: Whether module has been started
+        is_completed: Whether module is completed
+        completion_percentage: Percentage of lessons completed
+        started_at: When module was first accessed
+        completed_at: When module was completed
+    """
+    
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='module_progress'
+    )
+    module = models.ForeignKey(
+        Module,
+        on_delete=models.CASCADE,
+        related_name='user_progress'
+    )
+    is_started = models.BooleanField(default=False)
+    is_completed = models.BooleanField(default=False)
+    completion_percentage = models.FloatField(default=0.0)
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        db_table = 'module_progress'
+        unique_together = ['user', 'module']
+        ordering = ['-started_at']
+    
+    def __str__(self) -> str:
+        return f"{self.user.email} - {self.module.title} ({self.completion_percentage:.1f}%)"
+    
+    def update_progress(self) -> None:
+        """Recalculate completion percentage."""
+        total_lessons = self.module.lessons.filter(is_published=True).count()
+        if total_lessons == 0:
+            self.completion_percentage = 0.0
+            return
+        
+        completed_lessons = LessonProgress.objects.filter(
+            user=self.user,
+            lesson__module=self.module,
+            is_completed=True
+        ).count()
+        
+        self.completion_percentage = (completed_lessons / total_lessons) * 100
+        
+        if self.completion_percentage >= 100 and not self.is_completed:
+            self.is_completed = True
+            self.completed_at = timezone.now()
+        
+        self.save(update_fields=['completion_percentage', 'is_completed', 'completed_at'])
 
 
 class LessonProgress(models.Model):
-    """Прогресс пользователя по уроку."""
+    """
+    Track user progress through lessons.
+    
+    Attributes:
+        user: Student
+        lesson: Lesson being tracked
+        is_completed: Whether lesson is completed
+        time_spent: Total time spent on lesson (seconds)
+        last_accessed: Last time lesson was accessed
+        completed_at: When lesson was completed
+    """
     
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name='lesson_progress',
-        verbose_name=_('user')
+        related_name='lesson_progress'
     )
     lesson = models.ForeignKey(
-        'courses.Lesson',
+        Lesson,
         on_delete=models.CASCADE,
-        related_name='user_progress',
-        verbose_name=_('lesson')
+        related_name='user_progress'
     )
-    
-    is_completed = models.BooleanField(_('is completed'), default=False)
-    completed_at = models.DateTimeField(_('completed at'), null=True, blank=True)
-    
-    created_at = models.DateTimeField(_('created at'), auto_now_add=True)
-    updated_at = models.DateTimeField(_('updated at'), auto_now=True)
+    is_completed = models.BooleanField(default=False)
+    time_spent = models.PositiveIntegerField(
+        default=0,
+        help_text='Time spent in seconds'
+    )
+    last_accessed = models.DateTimeField(auto_now=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
     
     class Meta:
-        verbose_name = _('lesson progress')
-        verbose_name_plural = _('lesson progress')
-        unique_together = [['user', 'lesson']]
-        indexes = [
-            models.Index(fields=['user', 'is_completed']),
-        ]
+        db_table = 'lesson_progress'
+        unique_together = ['user', 'lesson']
+        ordering = ['-last_accessed']
     
     def __str__(self) -> str:
-        status = 'Completed' if self.is_completed else 'In Progress'
-        return f"{self.user.email} - {self.lesson.title} ({status})"
-
-
-class ExerciseProgress(models.Model):
-    """Прогресс пользователя по заданию."""
+        status = "✅" if self.is_completed else "🟡"
+        return f"{status} {self.user.email} - {self.lesson.title}"
     
-    user = models.ForeignKey(
+    def mark_completed(self) -> None:
+        """Mark lesson as completed and award XP."""
+        if not self.is_completed:
+            self.is_completed = True
+            self.completed_at = timezone.now()
+            self.save(update_fields=['is_completed', 'completed_at'])
+            
+            # Award XP
+            self.user.add_xp(self.lesson.xp_reward)
+            
+            # Update module progress
+            module_progress, created = ModuleProgress.objects.get_or_create(
+                user=self.user,
+                module=self.lesson.module,
+                defaults={'is_started': True, 'started_at': timezone.now()}
+            )
+            module_progress.update_progress()
+
+
+class DailyStreak(models.Model):
+    """
+    Track user's daily activity streaks.
+    
+    Attributes:
+        user: Student
+        current_streak: Current consecutive days
+        longest_streak: Longest streak achieved
+        last_activity_date: Last day user was active
+    """
+    
+    user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name='exercise_progress',
-        verbose_name=_('user')
+        related_name='daily_streak'
     )
-    exercise = models.ForeignKey(
-        'exercises.Exercise',
-        on_delete=models.CASCADE,
-        related_name='user_progress',
-        verbose_name=_('exercise')
-    )
-    
-    is_completed = models.BooleanField(_('is completed'), default=False)
-    attempts = models.PositiveIntegerField(_('attempts'), default=0)
-    hints_used = models.PositiveIntegerField(_('hints used'), default=0)
-    points_earned = models.PositiveIntegerField(_('points earned'), default=0)
-    best_execution_time = models.FloatField(
-        _('best execution time'),
-        null=True,
-        blank=True
-    )
-    
-    completed_at = models.DateTimeField(_('completed at'), null=True, blank=True)
-    created_at = models.DateTimeField(_('created at'), auto_now_add=True)
-    updated_at = models.DateTimeField(_('updated at'), auto_now=True)
+    current_streak = models.PositiveIntegerField(default=0)
+    longest_streak = models.PositiveIntegerField(default=0)
+    last_activity_date = models.DateField(null=True, blank=True)
     
     class Meta:
-        verbose_name = _('exercise progress')
-        verbose_name_plural = _('exercise progress')
-        unique_together = [['user', 'exercise']]
-        indexes = [
-            models.Index(fields=['user', 'is_completed']),
-        ]
+        db_table = 'daily_streaks'
     
     def __str__(self) -> str:
-        status = 'Completed' if self.is_completed else f'{self.attempts} attempts'
-        return f"{self.user.email} - {self.exercise.title} ({status})"
-
-
-class Achievement(models.Model):
-    """Достижения для gamification."""
+        return f"{self.user.email} - {self.current_streak} days streak"
     
-    title = models.CharField(_('title'), max_length=100)
-    description = models.TextField(_('description'))
-    icon = models.CharField(
-        _('icon'),
-        max_length=50,
-        help_text=_('Icon name or emoji')
-    )
-    
-    # Criteria (JSON format)
-    criteria = models.JSONField(
-        _('criteria'),
-        help_text=_('Achievement unlock criteria')
-    )
-    
-    points = models.PositiveIntegerField(_('points'), default=0)
-    is_active = models.BooleanField(_('is active'), default=True)
-    
-    created_at = models.DateTimeField(_('created at'), auto_now_add=True)
-    
-    class Meta:
-        verbose_name = _('achievement')
-        verbose_name_plural = _('achievements')
-        ordering = ['-points', 'title']
-    
-    def __str__(self) -> str:
-        return self.title
-
-
-class UserAchievement(models.Model):
-    """Связь пользователей с их достижениями."""
-    
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='achievements',
-        verbose_name=_('user')
-    )
-    achievement = models.ForeignKey(
-        Achievement,
-        on_delete=models.CASCADE,
-        related_name='users',
-        verbose_name=_('achievement')
-    )
-    
-    unlocked_at = models.DateTimeField(_('unlocked at'), auto_now_add=True)
-    
-    class Meta:
-        verbose_name = _('user achievement')
-        verbose_name_plural = _('user achievements')
-        unique_together = [['user', 'achievement']]
-        ordering = ['-unlocked_at']
-    
-    def __str__(self) -> str:
-        return f"{self.user.email} - {self.achievement.title}"
+    def update_streak(self) -> None:
+        """Update streak based on activity."""
+        today = timezone.now().date()
+        
+        if not self.last_activity_date:
+            # First activity
+            self.current_streak = 1
+            self.longest_streak = 1
+            self.last_activity_date = today
+        elif self.last_activity_date == today:
+            # Already counted today
+            return
+        elif self.last_activity_date == today - timedelta(days=1):
+            # Consecutive day
+            self.current_streak += 1
+            if self.current_streak > self.longest_streak:
+                self.longest_streak = self.current_streak
+            self.last_activity_date = today
+        else:
+            # Streak broken
+            self.current_streak = 1
+            self.last_activity_date = today
+        
+        self.save()
