@@ -1,0 +1,151 @@
+[
+  {
+    "model": "courses.module",
+    "pk": 1,
+    "fields": {
+      "title": "Ansible Basics",
+      "slug": "ansible-basics",
+      "description": "Learn the fundamentals of Ansible including installation, ad-hoc commands, inventory management, and basic playbooks.",
+      "difficulty": "beginner",
+      "order": 1,
+      "icon": "🚀",
+      "estimated_hours": 8,
+      "is_published": true
+    }
+  },
+  {
+    "model": "courses.module",
+    "pk": 2,
+    "fields": {
+      "title": "Playbooks & Roles",
+      "slug": "playbooks-roles",
+      "description": "Master Ansible playbooks, roles, variables, templates, and handlers for efficient automation.",
+      "difficulty": "intermediate",
+      "order": 2,
+      "icon": "🎯",
+      "estimated_hours": 12,
+      "is_published": true
+    }
+  },
+  {
+    "model": "courses.module",
+    "pk": 3,
+    "fields": {
+      "title": "Advanced Ansible",
+      "slug": "advanced-ansible",
+      "description": "Dive into advanced topics including Ansible Vault, dynamic inventory, custom modules, and AWX/Tower.",
+      "difficulty": "advanced",
+      "order": 3,
+      "icon": "💡",
+      "estimated_hours": 15,
+      "is_published": true
+    }
+  },
+  {
+    "model": "courses.lesson",
+    "pk": 1,
+    "fields": {
+      "module": 1,
+      "title": "Introduction to Ansible",
+      "slug": "introduction-to-ansible",
+      "content": "# Introduction to Ansible\n\n## What is Ansible?\n\nAnsible is an open-source automation tool that simplifies configuration management, application deployment, and task automation.\n\n### Key Features\n\n- **Agentless**: No need to install agents on target machines\n- **Simple**: Uses YAML for configuration (easy to read and write)\n- **Powerful**: Can manage complex deployments\n- **Idempotent**: Safe to run multiple times\n\n## Why Use Ansible?\n\n1. **Infrastructure as Code**: Define your infrastructure in version-controlled files\n2. **Consistency**: Ensure all systems are configured identically\n3. **Efficiency**: Automate repetitive tasks\n4. **Scalability**: Manage thousands of servers easily\n\n## Basic Concepts\n\n### Inventory\nA list of hosts/servers that Ansible manages.\n\n### Playbooks\nYAML files that define automation tasks.\n\n### Modules\nReusable units of code that Ansible executes.\n\n## Getting Started\n\nIn the next lessons, we'll install Ansible and run our first commands!",
+      "order": 1,
+      "xp_reward": 50,
+      "estimated_minutes": 15,
+      "is_published": true
+    }
+  },
+  {
+    "model": "courses.lesson",
+    "pk": 2,
+    "fields": {
+      "module": 1,
+      "title": "Your First Playbook",
+      "slug": "your-first-playbook",
+      "content": "# Your First Ansible Playbook\n\n## What is a Playbook?\n\nA playbook is a YAML file containing a list of plays. Each play targets specific hosts and defines tasks to execute.\n\n## Basic Playbook Structure\n\n```yaml\n---\n- name: My First Playbook\n  hosts: all\n  tasks:\n    - name: Print hello message\n      debug:\n        msg: \"Hello, Ansible!\"\n```\n\n## Key Components\n\n### Play\nDefines which hosts to target and what tasks to run.\n\n### Tasks\nActions to execute on target hosts.\n\n### Modules\nBuilt-in functions like `debug`, `copy`, `apt`, etc.\n\n## Running a Playbook\n\n```bash\nansible-playbook playbook.yml\n```\n\n## Best Practices\n\n1. Always name your plays and tasks\n2. Use descriptive names\n3. Keep playbooks simple and focused\n4. Use comments when necessary\n\nNow let's write your first playbook!",
+      "order": 2,
+      "xp_reward": 75,
+      "estimated_minutes": 20,
+      "is_published": true
+    }
+  },
+  {
+    "model": "exercises.exercise",
+    "pk": 1,
+    "fields": {
+      "lesson": 2,
+      "title": "Hello Ansible",
+      "slug": "hello-ansible",
+      "description": "Create your first Ansible playbook that prints a welcome message.",
+      "instructions": "## Task\n\nCreate a playbook that:\n1. Targets all hosts\n2. Uses the `debug` module\n3. Prints the message: \"Welcome to Djarvis!\"\n\n## Expected Output\n\nYour playbook should successfully execute and display the welcome message.",
+      "starter_code": "---\n- name: My First Playbook\n  hosts: all\n  tasks:\n    # Add your task here\n",
+      "solution_code": "---\n- name: My First Playbook\n  hosts: all\n  tasks:\n    - name: Print welcome message\n      debug:\n        msg: \"Welcome to Djarvis!\"\n",
+      "test_cases": [
+        {
+          "type": "exit_code",
+          "name": "Playbook executes successfully",
+          "expected": 0
+        },
+        {
+          "type": "output_contains",
+          "name": "Output contains welcome message",
+          "expected": "Welcome to Djarvis"
+        },
+        {
+          "type": "no_errors",
+          "name": "No execution errors"
+        }
+      ],
+      "hints": [
+        "Use the 'debug' module to print messages",
+        "The 'msg' parameter specifies the message to display",
+        "Don't forget to name your task for better readability"
+      ],
+      "xp_reward": 100,
+      "difficulty": "easy",
+      "order": 1,
+      "time_limit_seconds": 300,
+      "max_attempts": 10,
+      "is_published": true
+    }
+  },
+  {
+    "model": "accounts.achievement",
+    "pk": 1,
+    "fields": {
+      "name": "First Steps",
+      "description": "Complete your first lesson",
+      "icon": "🎓",
+      "xp_reward": 50,
+      "requirement_type": "complete_lessons",
+      "requirement_value": 1,
+      "is_active": true
+    }
+  },
+  {
+    "model": "accounts.achievement",
+    "pk": 2,
+    "fields": {
+      "name": "Exercise Master",
+      "description": "Complete 5 exercises",
+      "icon": "🏆",
+      "xp_reward": 200,
+      "requirement_type": "complete_exercises",
+      "requirement_value": 5,
+      "is_active": true
+    }
+  },
+  {
+    "model": "accounts.achievement",
+    "pk": 3,
+    "fields": {
+      "name": "Week Warrior",
+      "description": "Maintain a 7-day streak",
+      "icon": "🔥",
+      "xp_reward": 300,
+      "requirement_type": "streak_days",
+      "requirement_value": 7,
+      "is_active": true
+    }
+  }
+]
