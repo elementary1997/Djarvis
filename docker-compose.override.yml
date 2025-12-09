@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  web:
+    command: sh -c "
+      echo '🔄 Creating migrations...' &&
+      python manage.py makemigrations accounts &&
+      python manage.py makemigrations courses &&
+      python manage.py makemigrations exercises &&
+      python manage.py makemigrations sandbox &&
+      python manage.py makemigrations progress &&
+      echo '✅ Migrations created' &&
+      echo '🔄 Applying migrations...' &&
+      python manage.py migrate &&
+      echo '✅ Migrations applied' &&
+      echo '📚 Collecting static files...' &&
+      python manage.py collectstatic --noinput &&
+      echo '✅ Static files collected' &&
+      echo '🚀 Starting Gunicorn...' &&
+      gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120
+      "
