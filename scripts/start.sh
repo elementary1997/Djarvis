@@ -23,14 +23,25 @@ docker-compose up -d db redis
 
 echo ""
 echo "⏳ Waiting for database to be ready..."
-sleep 10
+sleep 15
 
 # Start web services
 docker-compose up -d web celery_worker celery_beat
 
 echo ""
 echo "⏳ Waiting for web service to be ready..."
-sleep 5
+sleep 10
+
+# Check if migrations exist, if not create them
+echo "🔍 Checking migrations..."
+if [ ! -d "backend/apps/accounts/migrations" ] || [ -z "$(ls -A backend/apps/accounts/migrations 2>/dev/null)" ]; then
+    echo "📝 Creating initial migrations..."
+    docker-compose exec -T web python manage.py makemigrations accounts || true
+    docker-compose exec -T web python manage.py makemigrations courses || true
+    docker-compose exec -T web python manage.py makemigrations exercises || true
+    docker-compose exec -T web python manage.py makemigrations sandbox || true
+    docker-compose exec -T web python manage.py makemigrations progress || true
+fi
 
 # Run migrations
 echo "🔄 Running database migrations..."
@@ -54,6 +65,7 @@ echo "  API Docs:  http://localhost/api/docs/"
 echo ""
 echo "Useful commands:"
 echo "  View logs:        docker-compose logs -f"
+echo "  View web logs:    docker-compose logs -f web"
 echo "  Stop:             docker-compose down"
 echo "  Restart:          docker-compose restart"
 echo ""
