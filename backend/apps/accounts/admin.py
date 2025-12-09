@@ -1,52 +1,45 @@
 """
-Admin configuration for accounts app.
+Admin interface для управления пользователями.
 """
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils.translation import gettext_lazy as _
-
-from .models import User, UserProfile
-
-
-class UserProfileInline(admin.StackedInline):
-    """Inline admin for user profile."""
-    model = UserProfile
-    can_delete = False
-    verbose_name_plural = 'Profile'
-    fields = [
-        'timezone', 'language', 'notifications_enabled',
-        'receive_marketing_emails', 'total_points', 'streak_days'
-    ]
-    readonly_fields = ['total_points', 'streak_days', 'last_activity']
+from .models import User
 
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
-    """Admin configuration for User model."""
-    
-    inlines = [UserProfileInline]
+    """Custom User admin с дополнительными полями."""
     
     list_display = [
-        'email', 'username', 'first_name', 'last_name',
-        'role', 'is_active', 'is_email_verified', 'created_at'
+        'email',
+        'username',
+        'total_points',
+        'total_exercises_completed',
+        'current_streak',
+        'is_staff',
+        'is_active',
+        'created_at',
     ]
-    list_filter = [
-        'role', 'is_active', 'is_email_verified',
-        'is_staff', 'created_at'
-    ]
+    list_filter = ['is_staff', 'is_active', 'theme', 'email_notifications', 'created_at']
     search_fields = ['email', 'username', 'first_name', 'last_name']
     ordering = ['-created_at']
     
     fieldsets = (
         (None, {'fields': ('email', 'username', 'password')}),
-        (_('Personal info'), {
-            'fields': ('first_name', 'last_name', 'bio', 'avatar', 'github_username')
-        }),
-        (_('Permissions'), {
+        (_('Personal info'), {'fields': ('first_name', 'last_name', 'bio', 'avatar')}),
+        (_('Statistics'), {
             'fields': (
-                'role', 'is_active', 'is_staff', 'is_superuser',
-                'is_email_verified', 'groups', 'user_permissions'
-            ),
+                'total_exercises_completed',
+                'total_points',
+                'current_streak',
+                'longest_streak',
+                'last_activity_date',
+            )
+        }),
+        (_('Settings'), {'fields': ('theme', 'email_notifications')}),
+        (_('Permissions'), {
+            'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions'),
         }),
         (_('Important dates'), {'fields': ('last_login', 'date_joined')}),
     )
@@ -54,9 +47,8 @@ class UserAdmin(BaseUserAdmin):
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': (
-                'email', 'username', 'password1', 'password2',
-                'first_name', 'last_name', 'role'
-            ),
+            'fields': ('email', 'username', 'password1', 'password2'),
         }),
     )
+    
+    readonly_fields = ['created_at', 'updated_at', 'last_login', 'date_joined']
