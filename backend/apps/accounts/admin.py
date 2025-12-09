@@ -1,45 +1,30 @@
 """
-Admin interface для управления пользователями.
+Admin interface for user accounts.
 """
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils.translation import gettext_lazy as _
-from .models import User
+from .models import User, Achievement, UserAchievement
 
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
-    """Custom User admin с дополнительными полями."""
+    """Admin interface for User model."""
     
     list_display = [
-        'email',
-        'username',
-        'total_points',
-        'total_exercises_completed',
-        'current_streak',
-        'is_staff',
-        'is_active',
-        'created_at',
+        'email', 'username', 'first_name', 'last_name',
+        'level', 'total_xp', 'is_verified', 'is_staff', 'date_joined'
     ]
-    list_filter = ['is_staff', 'is_active', 'theme', 'email_notifications', 'created_at']
+    list_filter = ['is_staff', 'is_superuser', 'is_verified', 'level']
     search_fields = ['email', 'username', 'first_name', 'last_name']
-    ordering = ['-created_at']
+    ordering = ['-date_joined']
     
     fieldsets = (
         (None, {'fields': ('email', 'username', 'password')}),
-        (_('Personal info'), {'fields': ('first_name', 'last_name', 'bio', 'avatar')}),
-        (_('Statistics'), {
-            'fields': (
-                'total_exercises_completed',
-                'total_points',
-                'current_streak',
-                'longest_streak',
-                'last_activity_date',
-            )
-        }),
-        (_('Settings'), {'fields': ('theme', 'email_notifications')}),
+        (_('Personal info'), {'fields': ('first_name', 'last_name', 'avatar', 'bio')}),
+        (_('Gamification'), {'fields': ('total_xp', 'level', 'preferred_language')}),
         (_('Permissions'), {
-            'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions'),
+            'fields': ('is_active', 'is_verified', 'is_staff', 'is_superuser', 'groups', 'user_permissions'),
         }),
         (_('Important dates'), {'fields': ('last_login', 'date_joined')}),
     )
@@ -50,5 +35,27 @@ class UserAdmin(BaseUserAdmin):
             'fields': ('email', 'username', 'password1', 'password2'),
         }),
     )
+
+
+@admin.register(Achievement)
+class AchievementAdmin(admin.ModelAdmin):
+    """Admin interface for Achievement model."""
     
-    readonly_fields = ['created_at', 'updated_at', 'last_login', 'date_joined']
+    list_display = [
+        'name', 'icon', 'requirement_type', 'requirement_value',
+        'xp_reward', 'is_active'
+    ]
+    list_filter = ['requirement_type', 'is_active']
+    search_fields = ['name', 'description']
+    ordering = ['requirement_value']
+
+
+@admin.register(UserAchievement)
+class UserAchievementAdmin(admin.ModelAdmin):
+    """Admin interface for UserAchievement model."""
+    
+    list_display = ['user', 'achievement', 'unlocked_at']
+    list_filter = ['achievement', 'unlocked_at']
+    search_fields = ['user__email', 'user__username', 'achievement__name']
+    ordering = ['-unlocked_at']
+    raw_id_fields = ['user', 'achievement']

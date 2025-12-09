@@ -1,9 +1,5 @@
 """
-User model и профили пользователей.
-
-Архитектурное решение:
-- Расширенная модель User с дополнительными полями для трекинга
-- Использование AbstractUser для гибкости
+User models for authentication and profile management.
 """
 from django.contrib.auth.models import AbstractUser
 from django.db import models
@@ -11,68 +7,161 @@ from django.utils.translation import gettext_lazy as _
 
 
 class User(AbstractUser):
-    """Custom User model с расширенными полями."""
+    """
+    Custom user model extending Django's AbstractUser.
+    
+    Attributes:
+        email: Unique email address for authentication
+        avatar: User profile picture
+        bio: Short biography
+        total_xp: Total experience points earned
+        level: Current user level
+        is_verified: Email verification status
+        preferred_language: Preferred programming language
+    """
     
     email = models.EmailField(_('email address'), unique=True)
-    bio = models.TextField(_('biography'), max_length=500, blank=True)
     avatar = models.ImageField(
-        _('avatar'),
         upload_to='avatars/',
+        null=True,
         blank=True,
-        null=True
+        help_text='User profile picture'
     )
-    
-    # Statistics
-    total_exercises_completed = models.IntegerField(_('total exercises completed'), default=0)
-    total_points = models.IntegerField(_('total points'), default=0)
-    current_streak = models.IntegerField(_('current streak days'), default=0)
-    longest_streak = models.IntegerField(_('longest streak days'), default=0)
-    last_activity_date = models.DateField(_('last activity date'), null=True, blank=True)
-    
-    # Settings
-    email_notifications = models.BooleanField(_('email notifications'), default=True)
-    theme = models.CharField(
-        _('theme'),
+    bio = models.TextField(
+        max_length=500,
+        blank=True,
+        help_text='Short biography'
+    )
+    total_xp = models.PositiveIntegerField(
+        default=0,
+        help_text='Total experience points'
+    )
+    level = models.PositiveIntegerField(
+        default=1,
+        help_text='Current user level'
+    )
+    is_verified = models.BooleanField(
+        default=False,
+        help_text='Email verification status'
+    )
+    preferred_language = models.CharField(
         max_length=10,
-        choices=[('light', 'Light'), ('dark', 'Dark')],
-        default='light'
+        default='python',
+        help_text='Preferred programming language'
     )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     
-    created_at = models.DateTimeField(_('created at'), auto_now_add=True)
-    updated_at = models.DateTimeField(_('updated at'), auto_now=True)
-    
+    # Make email the username field
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
     
     class Meta:
-        verbose_name = _('user')
-        verbose_name_plural = _('users')
+        db_table = 'users'
+        verbose_name = _('User')
+        verbose_name_plural = _('Users')
         ordering = ['-created_at']
-        indexes = [
-            models.Index(fields=['email']),
-            models.Index(fields=['-total_points']),
-        ]
     
     def __str__(self) -> str:
-        return self.email
+        return f"{self.email} (Level {self.level})"
     
-    def update_streak(self) -> None:
-        """Обновляет streak пользователя на основе последней активности."""
-        from django.utils import timezone
-        today = timezone.now().date()
-        
-        if self.last_activity_date:
-            days_diff = (today - self.last_activity_date).days
-            
-            if days_diff == 1:
-                # Продолжаем streak
-                self.current_streak += 1
-                self.longest_streak = max(self.current_streak, self.longest_streak)
-            elif days_diff > 1:
-                # Сбрасываем streak
-                self.current_streak = 1
-        else:
-            self.current_streak = 1
-        
-        self.last_activity_date = today
-        self.save(update_fields=['current_streak', 'longest_streak', 'last_activity_date'])
+    def add_xp(self, xp: int) -> None:
+        """Add experience points and level up if necessary."""
+        self.total_xp += xp
+        # Simple leveling: every 1000 XP = 1 level
+        new_level = (self.total_xp // 1000) + 1
+        if new_level > self.level:
+            self.level = new_level
+        self.save(update_fields=['total_xp', 'level'])
+    
+    @property
+    def xp_to_next_level(self) -> int:
+        """Calculate XP needed for next level."""
+        return (self.level * 1000) - self.total_xp
+    
+    @property
+    def progress_percentage(self) -> float:
+        """Calculate progress to next level as percentage."""
+        current_level_xp = (self.level - 1) * 1000
+        next_level_xp = self.level * 1000
+        progress_xp = self.total_xp - current_level_xp
+        total_xp_needed = next_level_xp - current_level_xp
+        return (progress_xp / total_xp_needed) * 100 if total_xp_needed > 0 else 0
+
+
+class Achievement(models.Model):
+    """
+    Achievements that users can unlock.
+    
+    Attributes:
+        name: Achievement name
+        description: Achievement description
+        icon: Achievement icon/badge
+        xp_reward: XP points awarded
+        requirement_type: Type of requirement (e.g., 'complete_lessons', 'streak')
+        requirement_value: Value needed to unlock
+    """
+    
+    REQUIREMENT_TYPES = [
+        ('complete_lessons', 'Complete Lessons'),
+        ('complete_exercises', 'Complete Exercises'),
+        ('streak_days', 'Daily Streak'),
+        ('perfect_score', 'Perfect Score'),
+        ('speed_run', 'Speed Run'),
+    ]
+    
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField()
+    icon = models.CharField(max_length=50, default='🏆')
+    xp_reward = models.PositiveIntegerField(default=100)
+    requirement_type = models.CharField(
+        max_length=30,
+        choices=REQUIREMENT_TYPES
+    )
+    requirement_value = models.PositiveIntegerField(
+        help_text='Value needed to unlock achievement'
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'achievements'
+        verbose_name = _('Achievement')
+        verbose_name_plural = _('Achievements')
+        ordering = ['requirement_value']
+    
+    def __str__(self) -> str:
+        return f"{self.icon} {self.name}"
+
+
+class UserAchievement(models.Model):
+    """
+    Junction table tracking user achievements.
+    
+    Attributes:
+        user: User who unlocked the achievement
+        achievement: Achievement that was unlocked
+        unlocked_at: Timestamp when achievement was unlocked
+    """
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='achievements'
+    )
+    achievement = models.ForeignKey(
+        Achievement,
+        on_delete=models.CASCADE,
+        related_name='users'
+    )
+    unlocked_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'user_achievements'
+        verbose_name = _('User Achievement')
+        verbose_name_plural = _('User Achievements')
+        unique_together = ['user', 'achievement']
+        ordering = ['-unlocked_at']
+    
+    def __str__(self) -> str:
+        return f"{self.user.email} - {self.achievement.name}"
