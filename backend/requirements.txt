@@ -10,33 +10,44 @@ django-cors-headers==4.3.1
 django-filter==23.5
 drf-spectacular==0.27.0
 
-# Celery
-celery==5.3.4
+# Celery & Redis
+celery==5.3.6
 redis==5.0.1
+django-redis==5.4.0
 django-celery-beat==2.5.0
 django-celery-results==2.5.1
 
-# Docker SDK
+# Async & Channels
+channels==4.0.0
+channels-redis==4.1.0
+daphne==4.0.0
+
+# Security
+django-ratelimit==4.1.0
+django-defender==0.9.7
+
+# Utils
+Pillow==10.2.0
+python-dotenv==1.0.0
+gunicorn==21.2.0
+whitenoise==6.6.0
+
+# Ansible
+ansible==9.1.0
+ansible-runner==2.3.4
+
+# Docker
 docker==7.0.0
 
-# Utilities
-Pillow==10.2.0
-markdown==3.5.1
-python-slugify==8.0.1
-PyYAML==6.0.1
+# Markdown
+markdown==3.5.2
+django-markdownx==4.0.2
 
-# Code execution & validation
+# Monitoring
+sentry-sdk==1.40.0
+
+# Testing
 pytest==7.4.4
 pytest-django==4.7.0
 pytest-cov==4.1.0
-
-# Monitoring & Logging
-sentry-sdk==1.39.2
-
-# Production server
-gunicorn==21.2.0
-
-# Development
-ipython==8.20.0
-django-debug-toolbar==4.2.0
-django-extensions==3.2.3
+faker==22.6.0

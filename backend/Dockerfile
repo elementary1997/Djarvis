@@ -1,36 +1,44 @@
 FROM python:3.11-slim
 
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
+# Метаданные
+LABEL maintainer="elipashev2023@yandex.ru"
+LABEL description="Djarvis - Interactive Ansible Learning Platform"
+
+# Переменные окружения
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Install system dependencies
+# Рабочая директория
+WORKDIR /app
+
+# Установка системных зависимостей
 RUN apt-get update && apt-get install -y \
     gcc \
     postgresql-client \
-    docker.io \
+    libpq-dev \
     curl \
-    git \
-    && apt-get clean \
+    docker.io \
+    openssh-client \
+    sshpass \
+    ansible \
     && rm -rf /var/lib/apt/lists/*
 
-# Set work directory
-WORKDIR /app
-
-# Install Python dependencies
-COPY requirements.txt /app/
+# Установка Python зависимостей
+COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt
 
-# Copy project
-COPY . /app/
+# Копирование проекта
+COPY . .
 
-# Create necessary directories
+# Создание необходимых директорий
 RUN mkdir -p /app/staticfiles /app/media /app/logs
 
-# Set permissions
-RUN chmod +x /app/entrypoint.sh || true
+# Права на выполнение скриптов
+RUN chmod +x /app/scripts/*.sh || true
 
 EXPOSE 8000
+
+CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000"]
