@@ -27,14 +27,14 @@ if [ ! -f backend/.env ]; then
     echo "🔧 Creating .env file from template..."
     cp backend/.env.example backend/.env
     
-    # Generate secret key
-    SECRET_KEY=$(python3 -c "import random, string; print(''.join(random.SystemRandom().choice(string.ascii_letters + string.digits + string.punctuation) for _ in range(50)))" 2>/dev/null || echo "change-this-secret-key-in-production-$(date +%s)")
+    # Generate a simple secret key (alphanumeric only to avoid sed issues)
+    SECRET_KEY=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 50 | head -n 1)
     
-    # Update .env with generated secret key
+    # Update .env with generated secret key using | as delimiter
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        sed -i '' "s/your-secret-key-change-this-in-production/$SECRET_KEY/" backend/.env
+        sed -i '' "s|your-secret-key-change-this-in-production|$SECRET_KEY|" backend/.env
     else
-        sed -i "s/your-secret-key-change-this-in-production/$SECRET_KEY/" backend/.env
+        sed -i "s|your-secret-key-change-this-in-production|$SECRET_KEY|" backend/.env
     fi
     
     echo "✅ .env file created with generated secret key"
